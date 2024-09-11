@@ -2,6 +2,12 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
+const cors = require('cors');
+
+// Enable CORS for all routes
+app.use(cors());
+
+
 const servers = []; // Replace this with a proper database if needed
 const mappings = {}; // Replace this with a proper database
 
