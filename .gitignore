@@ -89,3 +89,4 @@ Temporary Items
 
 # NGINX specific
 *.conf
+.vercel
