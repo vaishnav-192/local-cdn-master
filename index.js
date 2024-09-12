@@ -8,38 +8,117 @@ const cors = require('cors');
 app.use(cors());
 
 
-const servers = []; // Replace this with a proper database if needed
-const mappings = {}; // Replace this with a proper database
+const servers = []; // This will hold server objects with address, name, and lastHeartbeat time
+const mappings = {}; // This will hold file mappings
 
-// Endpoint to register a server
+// Function to remove inactive servers and their mappings
+const removeInactiveServers = () => {
+    const now = Date.now();
+    const inactiveServers = [];
+
+    // Identify inactive servers
+    servers.forEach((server, index) => {
+        if (now - server.lastHeartbeat > 3600000) { //1 hour
+            inactiveServers.push({ index, serverAddress: server.serverAddress });
+        }
+    });
+
+    // Remove inactive servers and their mappings
+    inactiveServers.forEach(({ index, serverAddress }) => {
+        // Remove from servers array
+        const removedServer = servers.splice(index, 1)[0];
+        console.log(`Removed inactive server: ${removedServer.name} at ${serverAddress}`);
+
+        // Remove mappings for this server
+        for (const [contentType, serversMap] of Object.entries(mappings)) {
+            if (serversMap[serverAddress]) {
+                delete serversMap[serverAddress]; // Remove serverAddress entry
+                console.log(`Removed mappings for server: ${serverAddress} in content type: ${contentType}`);
+            }
+
+            // Remove the contentType if no servers are left
+            if (Object.keys(serversMap).length === 0) {
+                delete mappings[contentType];
+                console.log(`Removed content type: ${contentType} as it is empty`);
+            }
+        }
+    });
+};
+
+
+
+// Register the server with an initial heartbeat time
 app.post('/registerServer', (req, res) => {
-    const { serverAddress, name } = req.body; // Removed port as it's not needed in Vercel
+    const { serverAddress, name } = req.body;
     if (!serverAddress) {
         return res.status(400).send('Server address is required');
     }
 
-    // Register the server if it hasn't been registered yet
-    if (!servers.some(server => server.serverAddress === serverAddress)) {
-        servers.push({ serverAddress, name });
+    const existingServer = servers.find(server => server.serverAddress === serverAddress);
+    
+    if (!existingServer) {
+        servers.push({
+            serverAddress,
+            name,
+            lastHeartbeat: Date.now(), // Track the time of the last heartbeat
+        });
         console.log(`Server registered: ${name} at ${serverAddress}`);
     }
     res.sendStatus(200);
 });
 
-// Endpoint to add file mapping
-app.post('/addMapping', (req, res) => {
-    const { contentType, fileName, server } = req.body;
-    if (!contentType || !fileName || !server) {
-        return res.status(400).send('contentType, fileName, and server are required');
+// Handle heartbeat requests
+app.post('/heartbeat', (req, res) => {
+    const { serverAddress } = req.body;
+
+    if (!serverAddress) {
+        return res.status(400).send('serverAddress is required');
     }
 
+    // Find the server in the list based on serverAddress
+    const server = servers.find(s => s.serverAddress === serverAddress);
+
+    if (server) {
+        // Update the lastHeartbeat time for the server
+        server.lastHeartbeat = Date.now();
+        console.log(`Heartbeat received from ${server.name} (${server.serverAddress}) at ${new Date(server.lastHeartbeat).toISOString()}`);
+        res.sendStatus(200);
+    } else {
+        // If server is not found, send a 404 status
+        console.error(`Server not found: ${serverAddress}`);
+        res.status(404).send('Server not found');
+    }
+});
+
+// Periodically check for inactive servers
+setInterval(removeInactiveServers, 3600000); // Check every hour for inactive servers
+
+// Endpoint to add file mapping
+app.post('/addMapping', (req, res) => {
+    const { contentType, fileName, magnetLink, serverAddress } = req.body;
+
+    // Validate required fields
+    if (!contentType || !fileName || !magnetLink || !serverAddress) {
+        return res.status(400).send('contentType, fileName, magnetLink, and serverAddress are required');
+    }
+
+    // Initialize mappings for contentType if it does not exist
     if (!mappings[contentType]) {
         mappings[contentType] = {};
     }
-    mappings[contentType][fileName] = server;
-    console.log(`File mapping added: ${fileName} -> ${server}`);
+
+    // Initialize serverAddress mapping if it does not exist
+    if (!mappings[contentType][serverAddress]) {
+        mappings[contentType][serverAddress] = {};
+    }
+
+    // Add or update the file mapping
+    mappings[contentType][serverAddress][fileName] = magnetLink;
+
+    console.log(`File mapping added: ${fileName} -> ${serverAddress} (Magnet Link: ${magnetLink})`);
     res.sendStatus(200);
 });
+
 
 // Fetch matching files endpoint
 app.get('/fetchResults', (req, res) => {
@@ -51,10 +130,15 @@ app.get('/fetchResults', (req, res) => {
     const results = [];
     const fileNameRegex = new RegExp(fileName, 'i'); // Case-insensitive match
 
-    for (const [contentType, files] of Object.entries(mappings)) {
-        for (const [mappedFileName, server] of Object.entries(files)) {
-            if (fileNameRegex.test(mappedFileName)) {
-                results.push({ contentType, fileName: mappedFileName, server });
+    // Iterate over content types
+    for (const [contentType, servers] of Object.entries(mappings)) {
+        // Iterate over server addresses
+        for (const [serverAddress, files] of Object.entries(servers)) {
+            // Iterate over file names
+            for (const [mappedFileName, magnetLink] of Object.entries(files)) {
+                if (fileNameRegex.test(mappedFileName)) {
+                    results.push({ contentType, fileName: mappedFileName, magnetLink });
+                }
             }
         }
     }
@@ -66,17 +150,7 @@ app.get('/fetchResults', (req, res) => {
     res.json(results);
 });
 
-// Endpoint to fetch a file (redirect to the respective server)
-app.get('/getFile', (req, res) => {
-    const { contentType, fileName } = req.query;
-    const server = mappings[contentType]?.[fileName];
-    if (server) {
-        // Redirect to the server that holds the file
-        res.redirect(`${server}/giveFile?contentType=${contentType}&fileName=${fileName}`);
-    } else {
-        res.status(404).send('File not found');
-    }
-});
+
 
 // Endpoint to get all registered servers
 app.get('/servers', (req, res) => {
