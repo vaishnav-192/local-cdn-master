@@ -18,7 +18,7 @@ const removeInactiveServers = () => {
 
     // Identify inactive servers
     servers.forEach((server, index) => {
-        if (now - server.lastHeartbeat > 3600000) { //1 hour
+        if (now - server.lastHeartbeat > 960000) { //16 minutes
             inactiveServers.push({ index, serverAddress: server.serverAddress });
         }
     });
@@ -91,7 +91,7 @@ app.post('/heartbeat', (req, res) => {
 });
 
 // Periodically check for inactive servers
-setInterval(removeInactiveServers, 3600000); // Check every hour for inactive servers
+setInterval(removeInactiveServers, 960000); // Check every 16 minutes for inactive servers
 
 // Endpoint to add file mapping
 app.post('/addMapping', (req, res) => {
