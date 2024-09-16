@@ -2,6 +2,12 @@
 
 This project represents the master node for a local CDN (Content Delivery Network), designed to coordinate multiple server nodes that upload and serve content. The master node maintains metadata about the servers and their file mappings, ensuring smooth communication and uptime monitoring through heartbeat checks.
 
+## Hosted Backend and Frontend
+
+- **Backend Server:** The master node is hosted on Vercel at [local-cdn-master.vercel.app](https://local-cdn-master.vercel.app/).
+- **Frontend:** The frontend for this backend is located in the repository [master-frontend](https://github.com/vaishnav-192/master-frontend) and is deployed on Vercel at [local-cdn-master-frontend.vercel.app](https://local-cdn-master-frontend.vercel.app/).
+
+
 ## Features
 
 1. **Server Registration and Monitoring:**
